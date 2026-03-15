@@ -25,6 +25,7 @@ export interface BacktestResult {
 
 export interface AdvancedMetrics {
   oddEvenRatio: string;
+  bigSmallRatio: string;
   span: number;
   intervalDensity: number[];
   clusterGroups: number[][];
