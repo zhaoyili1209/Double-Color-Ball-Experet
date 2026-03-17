@@ -27,6 +27,7 @@ export interface AdvancedMetrics {
   oddEvenRatio: string;
   bigSmallRatio: string;
   span: number;
+  sumTrend: number;
   intervalDensity: number[];
   clusterGroups: number[][];
   ensembleWeights: ModelWeights;

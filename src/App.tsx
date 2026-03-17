@@ -329,7 +329,7 @@ export default function App() {
                           <Ball number={pred.blueBall} type="blue" />
                         </div>
 
-                        <div className="mt-8 grid grid-cols-3 md:grid-cols-5 gap-4 pt-6 border-t border-slate-800/50">
+                        <div className="mt-8 grid grid-cols-3 md:grid-cols-6 gap-4 pt-6 border-t border-slate-800/50">
                           <div className="text-center">
                             <div className="text-[10px] text-slate-500 uppercase font-bold">奇偶比</div>
                             <div className="text-sm font-bold text-white">{pred.metrics.oddEvenRatio}</div>
@@ -341,6 +341,10 @@ export default function App() {
                           <div className="text-center">
                             <div className="text-[10px] text-slate-500 uppercase font-bold">跨度</div>
                             <div className="text-sm font-bold text-white">{pred.metrics.span}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-[10px] text-slate-500 uppercase font-bold">和值走势</div>
+                            <div className="text-sm font-bold text-white">{pred.metrics.sumTrend > 0 ? `+${pred.metrics.sumTrend}` : pred.metrics.sumTrend}</div>
                           </div>
                           <div className="text-center">
                             <div className="text-[10px] text-slate-500 uppercase font-bold">区间密度</div>
