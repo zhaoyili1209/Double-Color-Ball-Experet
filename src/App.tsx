@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   TrendingUp, 
   Dna, 
-  BarChart3, 
+   BarChart3, 
   History, 
   Zap, 
   RefreshCw,
@@ -15,8 +15,10 @@ import {
   ChevronRight,
   Target,
   Trash2,
-  Calendar
+  Calendar,
+  Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { 
   BarChart, 
   Bar, 
@@ -99,6 +101,31 @@ export default function App() {
       setHistory([]);
       localStorage.removeItem('lottery_history');
     }
+  };
+
+  const exportToExcel = () => {
+    if (history.length === 0) return;
+
+    const data = history.map((item) => ({
+      '预测时间': new Date(item.timestamp).toLocaleString(),
+      '置信度': `${item.confidence}%`,
+      '红球1': item.redBalls[0],
+      '红球2': item.redBalls[1],
+      '红球3': item.redBalls[2],
+      '红球4': item.redBalls[3],
+      '红球5': item.redBalls[4],
+      '红球6': item.redBalls[5],
+      '蓝球': item.blueBall,
+      '奇偶比': item.metrics.oddEvenRatio,
+      '大小比': item.metrics.bigSmallRatio,
+      '跨度': item.metrics.span,
+      '和值走势': item.metrics.sumTrend,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "预测历史");
+    XLSX.writeFile(workbook, `lottery_prediction_history_${new Date().getTime()}.xlsx`);
   };
 
   const handleCalculate = async () => {
@@ -557,15 +584,26 @@ export default function App() {
                       <History className="text-red-500" size={24} />
                       <h3 className="font-black text-xl text-white">预测历史记录</h3>
                     </div>
-                    {history.length > 0 && (
-                      <button 
-                        onClick={clearHistory}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all"
-                      >
-                        <Trash2 size={14} />
-                        清除历史
-                      </button>
-                    )}
+                    <div className="flex gap-2">
+                      {history.length > 0 && (
+                        <>
+                          <button 
+                            onClick={exportToExcel}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-500 text-xs font-bold hover:bg-emerald-500/20 transition-all"
+                          >
+                            <Download size={14} />
+                            导出 Excel
+                          </button>
+                          <button 
+                            onClick={clearHistory}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 text-red-500 text-xs font-bold hover:bg-red-500/20 transition-all"
+                          >
+                            <Trash2 size={14} />
+                            清除历史
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {history.length > 0 ? (
