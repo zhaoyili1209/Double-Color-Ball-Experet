@@ -32,7 +32,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { generateMockStats, calculateProbabilities, predictNextDraw } from './utils/lotteryEngine';
+import { generateMockStats, calculateProbabilities, predictNextDraw, getRecentDraws } from './utils/lotteryEngine';
 import { BallStats, PredictionResult } from './types';
 
 function cn(...inputs: ClassValue[]) {
@@ -69,6 +69,7 @@ export default function App() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stats, setStats] = useState<{ redStats: BallStats[]; blueStats: BallStats[] } | null>(null);
+  const [recentDraws, setRecentDraws] = useState<any[]>([]);
   const [predictions, setPredictions] = useState<PredictionResult[]>([]);
   const [history, setHistory] = useState<PredictionResult[]>([]);
   const [activeTab, setActiveTab] = useState<'prediction' | 'stats' | 'advanced' | 'backtest' | 'history'>('prediction');
@@ -79,6 +80,7 @@ export default function App() {
     const redWithProb = calculateProbabilities(raw.redStats);
     const blueWithProb = calculateProbabilities(raw.blueStats);
     setStats({ redStats: redWithProb, blueStats: blueWithProb });
+    setRecentDraws(getRecentDraws());
 
     const savedHistory = localStorage.getItem('lottery_history');
     if (savedHistory) {
@@ -323,7 +325,60 @@ export default function App() {
           </div>
 
           {/* Right Column: Results/Charts */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Latest Draw Result Module */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[#151518] border border-slate-800 rounded-3xl p-6 md:p-8 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4">
+                <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">最新开奖日期</div>
+                <div className="text-sm font-black text-white">{recentDraws[0]?.date}</div>
+              </div>
+              
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-500/10 rounded-xl">
+                  <Calendar className="text-blue-500" size={20} />
+                </div>
+                <div>
+                  <h2 className="font-bold text-lg text-white">最新开奖号码</h2>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest">第 {recentDraws[0]?.period} 期</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3 md:gap-4 items-center">
+                {recentDraws[0]?.red.map((num: number, i: number) => (
+                  <Ball key={i} number={num} type="red" active />
+                ))}
+                <div className="w-px h-8 bg-slate-800 mx-2" />
+                <Ball number={recentDraws[0]?.blue} type="blue" active />
+              </div>
+            </motion.div>
+
+            {/* Recent Draws List (Compact) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {recentDraws.slice(1).map((draw, idx) => (
+                <div key={idx} className="bg-[#151518] border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-slate-500 uppercase font-bold">第 {draw.period} 期</div>
+                    <div className="text-xs text-slate-400">{draw.date}</div>
+                  </div>
+                  <div className="flex gap-1">
+                    {draw.red.slice(0, 3).map((n: number, i: number) => (
+                      <div key={i} className="w-6 h-6 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-[10px] font-bold text-red-500">
+                        {n.toString().padStart(2, '0')}
+                      </div>
+                    ))}
+                    <div className="text-slate-700 self-center">...</div>
+                    <div className="w-6 h-6 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-[10px] font-bold text-blue-500">
+                      {draw.blue.toString().padStart(2, '0')}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <AnimatePresence mode="wait">
               {activeTab === 'prediction' ? (
                 <motion.div
@@ -653,7 +708,7 @@ export default function App() {
         {/* Footer */}
         <footer className="mt-20 pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 text-xs">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1"><History size={14} /> 数据更新至：2026-03-14</span>
+            <span className="flex items-center gap-1"><History size={14} /> 数据更新至：2026-03-31</span>
             <span className="flex items-center gap-1"><TrendingUp size={14} /> 算法版本：v4.0.0-ensemble</span>
           </div>
           <p>© 2026 双色球概率预测大师. All Rights Reserved.</p>

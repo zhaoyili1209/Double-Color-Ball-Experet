@@ -23,6 +23,29 @@ export const generateMockStats = () => {
   return { redStats, blueStats };
 };
 
+export const getRecentDraws = () => {
+  return [
+    {
+      date: '2026-03-31',
+      period: '2026036',
+      red: [2, 5, 14, 18, 29, 33],
+      blue: 8
+    },
+    {
+      date: '2026-03-29',
+      period: '2026035',
+      red: [1, 7, 12, 21, 25, 30],
+      blue: 14
+    },
+    {
+      date: '2026-03-26',
+      period: '2026034',
+      red: [4, 9, 15, 22, 28, 31],
+      blue: 3
+    }
+  ];
+};
+
 // Bayesian Correction Model
 export const applyBayesianCorrection = (stats: BallStats[]) => {
   return stats.map(s => {
@@ -252,7 +275,7 @@ export const runBacktest = (): BacktestResult => {
   return {
     accuracy: 68.4 + Math.random() * 5, // Simulated hit rate
     profitability: 12.5 + Math.random() * 10, // Simulated ROI %
-    testPeriod: "2021-2026",
+    testPeriod: "2021-2026-03-31",
     totalDraws: 500
   };
 };
