@@ -32,7 +32,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { generateMockStats, calculateProbabilities, predictNextDraw, getRecentDraws } from './utils/lotteryEngine';
+import { generateMockStats, calculateProbabilities, predictNextDraw, getRecentDraws, calculateStatsFromHistory } from './utils/lotteryEngine';
 import { BallStats, PredictionResult } from './types';
 
 function cn(...inputs: ClassValue[]) {
@@ -70,17 +70,23 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [stats, setStats] = useState<{ redStats: BallStats[]; blueStats: BallStats[] } | null>(null);
   const [recentDraws, setRecentDraws] = useState<any[]>([]);
+  const [isUpdatingDraws, setIsUpdatingDraws] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ source: string; time: string } | null>(null);
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [correctionForm, setCorrectionForm] = useState({ period: '', red: '', blue: '', date: '' });
   const [predictions, setPredictions] = useState<PredictionResult[]>([]);
   const [history, setHistory] = useState<PredictionResult[]>([]);
   const [activeTab, setActiveTab] = useState<'prediction' | 'stats' | 'advanced' | 'backtest' | 'history'>('prediction');
 
   // Initialize stats and history
   useEffect(() => {
-    const raw = generateMockStats();
+    const draws = getRecentDraws();
+    setRecentDraws(draws);
+    
+    const raw = calculateStatsFromHistory(draws);
     const redWithProb = calculateProbabilities(raw.redStats);
     const blueWithProb = calculateProbabilities(raw.blueStats);
     setStats({ redStats: redWithProb, blueStats: blueWithProb });
-    setRecentDraws(getRecentDraws());
 
     const savedHistory = localStorage.getItem('lottery_history');
     if (savedHistory) {
@@ -162,6 +168,81 @@ export default function App() {
     }
     
     setIsCalculating(false);
+  };
+
+  const handleUpdateDraws = async () => {
+    if (isUpdatingDraws) return;
+    setIsUpdatingDraws(true);
+    
+    try {
+      // Call the server-side sync API
+      const response = await fetch('/api/lottery/sync');
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Merge with existing draws (avoid duplicates)
+        const newDraws = result.data;
+        const currentPeriods = new Set(recentDraws.map(d => d.period));
+        
+        const filteredNew = newDraws.filter((d: any) => !currentPeriods.has(d.period));
+        
+        if (filteredNew.length > 0) {
+          const updatedDraws = [...filteredNew, ...recentDraws].sort((a, b) => b.period.localeCompare(a.period));
+          setRecentDraws(updatedDraws);
+          
+          // Update stats based on new history
+          const raw = calculateStatsFromHistory(updatedDraws);
+          const redWithProb = calculateProbabilities(raw.redStats);
+          const blueWithProb = calculateProbabilities(raw.blueStats);
+          setStats({ redStats: redWithProb, blueStats: blueWithProb });
+        }
+        
+        setSyncStatus({
+          source: result.source,
+          time: new Date(result.timestamp).toLocaleTimeString()
+        });
+      }
+    } catch (error) {
+      console.error('Failed to sync draws:', error);
+    } finally {
+      setIsUpdatingDraws(false);
+    }
+  };
+
+  const handleManualCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const redNumbers = correctionForm.red.split(/[,\s]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+    const blueNumber = parseInt(correctionForm.blue.trim());
+
+    if (redNumbers.length !== 6 || isNaN(blueNumber)) {
+      alert('请输入正确的红球（6个）和蓝球（1个）');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/lottery/correct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          period: correctionForm.period,
+          red: redNumbers,
+          blue: blueNumber,
+          date: correctionForm.date
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setRecentDraws(result.data);
+        const raw = calculateStatsFromHistory(result.data);
+        const redWithProb = calculateProbabilities(raw.redStats);
+        const blueWithProb = calculateProbabilities(raw.blueStats);
+        setStats({ redStats: redWithProb, blueStats: blueWithProb });
+        setShowCorrectionModal(false);
+        setCorrectionForm({ period: '', red: '', blue: '', date: '' });
+      }
+    } catch (error) {
+      console.error('Correction failed:', error);
+    }
   };
 
   const chartData = useMemo(() => {
@@ -333,9 +414,15 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-[#151518] border border-slate-800 rounded-3xl p-6 md:p-8 relative overflow-hidden"
               >
-                <div className="absolute top-0 right-0 p-4">
+                <div className="absolute top-0 right-0 p-4 text-right">
                   <div className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1">最新开奖日期</div>
                   <div className="text-sm font-black text-white">{recentDraws[0]?.date}</div>
+                  {syncStatus && (
+                    <div className="text-[9px] text-emerald-500/70 mt-1 flex items-center justify-end gap-1">
+                      <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />
+                      已同步: {syncStatus.time}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex items-center gap-3 mb-6">
@@ -346,6 +433,29 @@ export default function App() {
                     <h2 className="font-bold text-lg text-white">最新开奖号码</h2>
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest">第 {recentDraws[0]?.period} 期</p>
                   </div>
+                </div>
+
+                <div className="absolute bottom-0 right-0 p-6 flex gap-2">
+                  <button
+                    onClick={() => setShowCorrectionModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-700"
+                  >
+                    <Info size={14} />
+                    纠错
+                  </button>
+                  <button
+                    onClick={handleUpdateDraws}
+                    disabled={isUpdatingDraws}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                      isUpdatingDraws
+                        ? "bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed"
+                        : "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
+                    )}
+                  >
+                    <RefreshCw className={cn("w-3 h-3", isUpdatingDraws && "animate-spin")} />
+                    {isUpdatingDraws ? "官网同步中..." : "实时更新号码"}
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap gap-3 md:gap-4 items-center">
@@ -709,10 +819,88 @@ export default function App() {
           </div>
         </main>
 
+        {/* Correction Modal */}
+        <AnimatePresence>
+          {showCorrectionModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-[#151518] border border-slate-800 rounded-3xl p-8 w-full max-w-md shadow-2xl"
+              >
+                <h2 className="text-xl font-bold text-white mb-4">数据纠错 / 手动更新</h2>
+                <p className="text-slate-400 text-sm mb-6">如果官网同步的数据有误，请在此手动输入正确号码。</p>
+                
+                <form onSubmit={handleManualCorrection} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">期号 (如: 2026041)</label>
+                    <input
+                      type="text"
+                      required
+                      value={correctionForm.period}
+                      onChange={e => setCorrectionForm({...correctionForm, period: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">开奖日期 (YYYY-MM-DD)</label>
+                    <input
+                      type="date"
+                      required
+                      value={correctionForm.date}
+                      onChange={e => setCorrectionForm({...correctionForm, date: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">红球 (6个, 逗号或空格分隔)</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="02, 07, 15, 21, 28, 32"
+                      value={correctionForm.red}
+                      onChange={e => setCorrectionForm({...correctionForm, red: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">蓝球 (1个)</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="11"
+                      value={correctionForm.blue}
+                      onChange={e => setCorrectionForm({...correctionForm, blue: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-3 mt-8">
+                    <button
+                      type="button"
+                      onClick={() => setShowCorrectionModal(false)}
+                      className="flex-1 px-4 py-3 rounded-xl text-sm font-bold bg-slate-800 text-slate-400 hover:bg-slate-700 transition-all"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-3 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20"
+                    >
+                      确认修正
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         {/* Footer */}
         <footer className="mt-20 pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-500 text-xs">
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1"><History size={14} /> 数据更新至：2026-03-31</span>
+            <span className="flex items-center gap-1"><History size={14} /> 数据更新至：2026-04-12</span>
             <span className="flex items-center gap-1"><TrendingUp size={14} /> 算法版本：v4.0.0-ensemble</span>
           </div>
           <p>© 2026 双色球概率预测大师. All Rights Reserved.</p>
